@@ -1,12 +1,12 @@
 Gem::Specification.new do |s|
   s.name = 'logstash-input-mongodb'
-  s.version = '0.3.3'
+  s.version = '0.4.0'
   s.licenses = ['Apache License (2.0)']
   s.summary = "This takes entries from mongodb as an input to logstash."
   s.description = "This gem is a logstash plugin required to be installed on top of the Logstash core pipeline using $LS_HOME/bin/plugin install gemname. This gem is not a stand-alone program"
-  s.authors = ["Philip Hutchins"]
+  s.authors = ["Philip Hutchins", "Nathan Reese"]
   s.email = 'flipture@gmail.com'
-  s.homepage = "http://www.phutchins.com"
+  s.homepage = "https://github.com/nreese/logstash-input-mongodb"
   s.require_paths = ["lib"]
 
   # Files

@@ -1,2 +1,2 @@
 .DS_Store
-.gem
+logstash-input-mongodb*.gem
