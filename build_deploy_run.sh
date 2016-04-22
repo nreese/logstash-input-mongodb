@@ -12,5 +12,5 @@ $LOGSTASH_HOME/bin/plugin install logstash-input-mongodb-0.4.0.gem
 
 echo "## Starting logstash with test configuration"
 cat scripts/test.conf
-rm logstash-mongodb/logstash_sqlite.db
+rm logstash-mongodb/*.db
 $LOGSTASH_HOME/bin/logstash -f scripts/test.conf

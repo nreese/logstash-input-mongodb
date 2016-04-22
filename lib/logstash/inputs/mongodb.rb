@@ -35,6 +35,8 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
   # Example collection: events_20150227 or events_
   config :collection, :validate => :string, :required => true
 
+  config :target_key, :validate => :string, :required => '_id'
+
   # This allows you to select the method you would like to use to parse your data
   config :parse_method, :validate => :string, :default => 'flatten'
 
@@ -74,6 +76,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
       sqlitedb.create_table "#{SINCE_TABLE}" do
         String :table
         Int :place
+        String :placeType
       end
     rescue
       @logger.debug("since table already exists")
@@ -81,13 +84,30 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
   end
 
   public
+  def pluck_target(doc)
+    target = doc[target_key]
+    @targetType = target.class.to_s
+    # properly convert target into type that can be expressed as a SQL literal
+    if target.is_a? BSON::ObjectId
+      target = target.to_s
+    elsif target.is_a? Time
+      #.iso8601 drops milliseconds so using strftime instead
+      target = target.strftime('%Y-%m-%dT%H:%M:%S.%L') + 'Z'
+    end
+    return target
+  end
+
+  public
   def init_placeholder(sqlitedb, since_table, mongodb, mongo_collection_name)
-    @logger.debug("init placeholder for #{since_table}_#{mongo_collection_name}")
+    @logger.debug("init placeholder for #{since_table}_#{mongo_collection_name}, target key=#{target_key}")
     since = sqlitedb[SINCE_TABLE]
     mongo_collection = mongodb.collection(mongo_collection_name)
-    first_entry = mongo_collection.find({}).sort('_id' => 1).limit(1).first
-    first_entry_id = first_entry['_id'].to_s
-    since.insert(:table => "#{since_table}_#{mongo_collection_name}", :place => first_entry_id)
+    first_entry = mongo_collection.find({}).sort(target_key => 1).limit(1).first
+    first_entry_id = pluck_target(first_entry)
+    since.insert(
+      :table => "#{since_table}_#{mongo_collection_name}", 
+      :place => first_entry_id,
+      :placeType => @targetType)
     return first_entry_id
   end
 
@@ -96,11 +116,13 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
     since = sqlitedb[SINCE_TABLE]
     x = since.where(:table => "#{since_table}_#{mongo_collection_name}")
     if x[:place].nil? || x[:place] == 0
+      @logger.error("setting place")
       first_entry_id = init_placeholder(sqlitedb, since_table, mongodb, mongo_collection_name)
       @logger.debug("FIRST ENTRY ID for #{mongo_collection_name} is #{first_entry_id}")
       return first_entry_id
     else
       @logger.debug("placeholder already exists, it is #{x[:place]}")
+      @targetType = x[:place][:placeType]
       return x[:place][:place]
     end
   end
@@ -130,11 +152,15 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
   end
 
   public
-  def get_cursor_for_collection(mongodb, mongo_collection_name, last_id_object, batch_size)
+  def get_cursor_for_collection(mongodb, mongo_collection_name, last_id, batch_size)
     collection = mongodb.collection(mongo_collection_name)
-    # Need to make this sort by date in object id then get the first of the series
-    # db.events_20150320.find().limit(1).sort({ts:1})
-    return collection.find({:_id => {:$gt => last_id_object}}).limit(batch_size)
+    last_id_object = last_id
+    if @targetType == 'BSON::ObjectId'
+      last_id_object = BSON::ObjectId(last_id)
+    elsif @targetType == 'Time'
+      last_id_object = Time.parse(last_id)
+    end
+    return collection.find({target_key => {:$gt => last_id_object}}).sort(target_key => 1).limit(batch_size)
   end
 
   public
@@ -224,8 +250,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
           last_id = @collection_data[index][:last_id]
           #@logger.debug("last_id is #{last_id}", :index => index, :collection => collection_name)
           # get batch of events starting at the last_place if it is set
-          last_id_object = BSON::ObjectId(last_id)
-          cursor = get_cursor_for_collection(@mongodb, collection_name, last_id_object, batch_size)
+          cursor = get_cursor_for_collection(@mongodb, collection_name, last_id, batch_size)
           cursor.each do |doc|
             logdate = DateTime.parse(doc['_id'].generation_time.to_s)
             event = LogStash::Event.new("host" => @host)
@@ -329,7 +354,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
             end
 
             queue << event
-            @collection_data[index][:last_id] = doc['_id'].to_s
+            @collection_data[index][:last_id] = pluck_target(doc)
           end
           # Store the last-seen doc in the database
           update_placeholder(@sqlitedb, since_table, collection_name, @collection_data[index][:last_id])
