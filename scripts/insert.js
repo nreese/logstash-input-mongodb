@@ -1,3 +1,5 @@
 var cursor = db.items.find({});
 var val = cursor.count() + 1;
-db.items.insert({value:val, lastModified: new Date()});
+var doc = {value:val, lastModified: new Date()};
+db.items.insert(doc);
+print("Inserted new document: " + JSON.stringify(doc, null, 4));
