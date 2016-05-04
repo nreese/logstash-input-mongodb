@@ -35,7 +35,9 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
   # Example collection: events_20150227 or events_
   config :collection, :validate => :string, :required => true
 
-  config :target_key, :validate => :string, :required => '_id'
+  config :target_key, :validate => :string, :default => '_id'
+
+  config :initial_place, :validate => :string, :default => ''
 
   # This allows you to select the method you would like to use to parse your data
   config :parse_method, :validate => :string, :default => 'flatten'
@@ -104,6 +106,10 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
     mongo_collection = mongodb.collection(mongo_collection_name)
     first_entry = mongo_collection.find({}).sort(target_key => 1).limit(1).first
     first_entry_id = pluck_target(first_entry)
+    if !initial_place.empty?
+      first_entry_id = initial_place
+    end
+    @logger.debug("collection: #{mongo_collection_name}, first_entry_id: #{first_entry_id}")
     since.insert(
       :table => "#{since_table}_#{mongo_collection_name}", 
       :place => first_entry_id,
@@ -116,7 +122,6 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
     since = sqlitedb[SINCE_TABLE]
     x = since.where(:table => "#{since_table}_#{mongo_collection_name}")
     if x[:place].nil? || x[:place] == 0
-      @logger.error("setting place")
       first_entry_id = init_placeholder(sqlitedb, since_table, mongodb, mongo_collection_name)
       @logger.debug("FIRST ENTRY ID for #{mongo_collection_name} is #{first_entry_id}")
       return first_entry_id
