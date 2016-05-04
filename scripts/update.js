@@ -1,14 +1,13 @@
 print("updating lastModified to current date...");
-db.items.update(
-   {},
-   {
-      $currentDate: {
-        lastModified: true
-      }
-   },
-   {
-     multi: true
-   }
+var now = new Date();
+var count = 0;
+//Using find and save because unable to access document in mongo.update
+//http://stackoverflow.com/questions/3788256/mongodb-updating-documents-using-data-from-the-same-document/3792958#3792958
+db.items.find().snapshot().forEach(
+  function (e) {
+    count++;
+    e.lastModified = now.toISOString() + "_" + e.unique;
+    db.items.save(e);
+  }
 )
-var last = db.runCommand({getLastError : 1});
-print("updated " + last.n + " document(s)");
+print("updated " + count + " document(s)");
