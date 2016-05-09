@@ -6,7 +6,7 @@ var count = 0;
 db.items.find().snapshot().forEach(
   function (e) {
     count++;
-    e.lastModified = now.toISOString() + "_" + e.unique;
+    e.lastModified = now.toISOString() + "_" + e._id;
     db.items.save(e);
   }
 )

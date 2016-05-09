@@ -257,7 +257,10 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
           # get batch of events starting at the last_place if it is set
           cursor = get_cursor_for_collection(@mongodb, collection_name, last_id, batch_size)
           cursor.each do |doc|
-            logdate = DateTime.parse(doc['_id'].generation_time.to_s)
+            logdate = Time.new
+            if doc['_id'].is_a? BSON::ObjectId
+              logdate = DateTime.parse(doc['_id'].generation_time.to_s)
+            end
             event = LogStash::Event.new("host" => @host)
             decorate(event)
             event["logdate"] = logdate.iso8601
