@@ -349,15 +349,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
               end
             elsif @parse_method == 'simple'
               doc.each do |k, v|
-                  if v.is_a? Numeric
-                    event[k] = v.abs
-                  elsif v.is_a? Array
-                    event[k] = v
-                  elsif v == "NaN"
-                    event[k] = Float::NAN
-                  else
-                    event[k] = v.to_s
-                  end
+                  event[k] = v
               end
             end
 
