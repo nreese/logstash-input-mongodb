@@ -93,8 +93,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
     if target.is_a? BSON::ObjectId
       target = target.to_s
     elsif target.is_a? Time
-      #.iso8601 drops milliseconds so using strftime instead
-      target = target.strftime('%Y-%m-%dT%H:%M:%S.%L') + 'Z'
+      target = toISO8601(target)
     end
     return target
   end
@@ -351,6 +350,10 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
               doc.each do |k, v|
                   event[k] = v
               end
+            elsif @parse_method == 'json'
+              doc.each do |k, v|
+                  event[k] = bsonToJson(v)
+              end
             end
 
             queue << event
@@ -372,6 +375,35 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
       end
     end
   end # def run
+
+  public
+  def bsonToJson(inputVal)
+    #@logger.info(inputVal.to_s + " is a: " + inputVal.class.to_s)
+    if inputVal.is_a? Array
+      array = []
+      inputVal.each do |v|
+        array.push(bsonToJson(v))
+      end
+      return array
+    elsif inputVal.is_a? BSON::Document
+      hash = {}
+      inputVal.each do |k, v|
+        hash[k] = bsonToJson(v)
+      end
+      return hash
+    elsif inputVal.is_a? Time
+      return toISO8601(inputVal)
+    else
+      return inputVal
+    end
+  end
+
+  #Time.iso8601 drops milliseconds so using strftime instead
+  public
+  def toISO8601(time)
+    time.utc
+    return time.strftime('%Y-%m-%dT%H:%M:%S.%L') + 'Z'
+  end
 
   def close
     # If needed, use this to tidy up on shutdown

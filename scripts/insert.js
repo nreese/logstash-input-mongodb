@@ -4,11 +4,14 @@ var now = new Date();
 var doc = {
   _id: uniqueToken, 
   lastModified: now.toISOString() + "_" + uniqueToken,
-  numKey: 10.3,
+  floatKey: 10.3,
+  intKey: 10,
+  dateKey: new Date(),
   stringKey: "hello",
-  arrKey: ["hello", 10, {subdoc: "nested"}],
+  arrKey: ["hello", 10, new Date(), {subdoc: "nested"}],
   objKey: {
-    nestedKey: "one level deeper"
+    nestedStringKey: "one level deeper",
+    nestedTimeKey: new Date()
   }
 };
 db.items.insert(doc);
