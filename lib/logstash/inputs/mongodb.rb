@@ -24,9 +24,6 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
   # The name of the sqlite databse file
   config :placeholder_db_name, :validate => :string, :default => "logstash_sqlite.db"
 
-  # Any table to exclude by name
-  config :exclude_tables, :validate => :array, :default => []
-
   config :batch_size, :avlidate => :number, :default => 30
 
   config :since_table, :validate => :string, :default => "logstash_since"
@@ -48,26 +45,9 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
   # This is the second level of hash flattening
   config :dig_dig_fields, :validate => :array, :default => []
 
-  # If true, store the @timestamp field in mongodb as an ISODate type instead
-  # of an ISO8601 string.  For more information about this, see
-  # http://www.mongodb.org/display/DOCS/Dates
-  config :isodate, :validate => :boolean, :default => false
-
-  # Number of seconds to wait after failure before retrying
-  config :retry_delay, :validate => :number, :default => 3, :required => false
-
-  # If true, an "_id" field will be added to the document before insertion.
-  # The "_id" field will use the timestamp of the event and overwrite an existing
-  # "_id" field in the event.
-  config :generateId, :validate => :boolean, :default => false
-
   config :unpack_mongo_id, :validate => :boolean, :default => false
 
-  # The message string to use in the event.
-  config :message, :validate => :string, :default => "Default message..."
-
-  # Set how frequently messages should be sent.
-  # The default, `1`, means send a message every second.
+  # MongoDB polling interval in seconds
   config :interval, :validate => :number, :default => 1
 
   SINCE_TABLE = :since_table
@@ -87,7 +67,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
 
   public
   def pluck_target(doc)
-    target = doc[target_key]
+    target = doc[@target_key]
     @targetType = target.class.to_s
     # properly convert target into type that can be expressed as a SQL literal
     if target.is_a? BSON::ObjectId
@@ -103,7 +83,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
     @logger.debug("init placeholder for #{since_table}_#{mongo_collection_name}, target key=#{target_key}")
     since = sqlitedb[SINCE_TABLE]
     mongo_collection = mongodb.collection(mongo_collection_name)
-    first_entry = mongo_collection.find({}).sort(target_key => 1).limit(1).first
+    first_entry = mongo_collection.find({}).sort(@target_key => 1).limit(1).first
     first_entry_id = pluck_target(first_entry)
     if !initial_place.empty?
       first_entry_id = initial_place
@@ -164,7 +144,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
     elsif @targetType == 'Time'
       last_id_object = Time.parse(last_id)
     end
-    return collection.find({target_key => {:$gt => last_id_object}}).sort(target_key => 1).limit(batch_size)
+    return collection.find({@target_key => {:$gt => last_id_object}}).sort(@target_key => 1).limit(batch_size)
   end
 
   public
@@ -239,10 +219,6 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
   end
 
   def run(queue)
-    sleep_min = 0.01
-    sleep_max = 5
-    sleeptime = sleep_min
-
     @logger.debug("Tailing MongoDB")
     @logger.debug("Collection data is: #{@collection_data}")
 
@@ -365,11 +341,8 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
         @logger.debug("Updating watch collections")
         @collection_data = update_watched_collections(@mongodb, @collection, @sqlitedb)
 
-        # nothing found in that iteration
-        # sleep a bit
-        @logger.debug("No new rows. Sleeping.", :time => sleeptime)
-        sleeptime = [sleeptime * 2, sleep_max].min
-        sleep(sleeptime)
+        @logger.debug("Sleeping poll interval.", :time => @interval)
+        sleep(@interval)
       rescue => e
         @logger.warn('MongoDB Input threw an exception, restarting', :exception => e)
       end
