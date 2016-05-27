@@ -37,13 +37,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
   config :initial_place, :validate => :string, :default => ''
 
   # This allows you to select the method you would like to use to parse your data
-  config :parse_method, :validate => :string, :default => 'flatten'
-
-  # If not flattening you can dig to flatten select fields
-  config :dig_fields, :validate => :array, :default => []
-
-  # This is the second level of hash flattening
-  config :dig_dig_fields, :validate => :array, :default => []
+  config :parse_method, :validate => :string, :default => 'simple'
 
   config :unpack_mongo_id, :validate => :boolean, :default => false
 
@@ -188,36 +182,6 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
     end
   end
 
-  def flatten(my_hash)
-    new_hash = {}
-    @logger.debug("Raw Hash: #{my_hash}")
-    if my_hash.respond_to? :each
-      my_hash.each do |k1,v1|
-        if v1.is_a?(Hash)
-          v1.each do |k2,v2|
-            if v2.is_a?(Hash)
-              # puts "Found a nested hash"
-              result = flatten(v2)
-              result.each do |k3,v3|
-                new_hash[k1.to_s+"_"+k2.to_s+"_"+k3.to_s] = v3
-              end
-              # puts "result: "+result.to_s+" k2: "+k2.to_s+" v2: "+v2.to_s
-            else
-              new_hash[k1.to_s+"_"+k2.to_s] = v2
-            end
-          end
-        else
-          # puts "Key: "+k1.to_s+" is not a hash"
-          new_hash[k1.to_s] = v1
-        end
-      end
-    else
-      @logger.debug("Flatten [ERROR]: hash did not respond to :each")
-    end
-    @logger.debug("Flattened Hash: #{new_hash}")
-    return new_hash
-  end
-
   def run(queue)
     @logger.info("Tailing MongoDB")
     @logger.info("Collection data is: #{@collection_data}")
@@ -257,72 +221,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
               event['process_id'] = process_id.first.to_i
             end
 
-            if @parse_method == 'flatten'
-              # Flatten the JSON so that the data is usable in Kibana
-              flat_doc = flatten(doc)
-              # Check for different types of expected values and add them to the event
-              if flat_doc['info_message'] && (flat_doc['info_message']  =~ /collection stats: .+/)
-                # Some custom stuff I'm having to do to fix formatting in past logs...
-                sub_value = flat_doc['info_message'].sub("collection stats: ", "")
-                JSON.parse(sub_value).each do |k1,v1|
-                  flat_doc["collection_stats_#{k1.to_s}"] = v1
-                end
-              end
-
-              flat_doc.each do |k,v|
-                # Check for an integer
-                @logger.debug("key: #{k.to_s} value: #{v.to_s}")
-                if v.is_a? Numeric
-                  event[k.to_s] = v
-                elsif v.is_a? String
-                  if v == "NaN"
-                    event[k.to_s] = Float::NAN
-                  elsif /\A[-+]?\d+[.][\d]+\z/ == v
-                    event[k.to_s] = v.to_f
-                  elsif (/\A[-+]?\d+\z/ === v) || (v.is_a? Integer)
-                    event[k.to_s] = v.to_i
-                  else
-                    event[k.to_s] = v
-                  end
-                else
-                  event[k.to_s] = v.to_s unless k.to_s == "_id" || k.to_s == "tags"
-                  if (k.to_s == "tags") && (v.is_a? Array)
-                    event['tags'] = v
-                  end
-                end
-              end
-            elsif @parse_method == 'dig'
-              # Dig into the JSON and flatten select elements
-              doc.each do |k, v|
-                if k != "_id"
-                  if (@dig_fields.include? k) && (v.respond_to? :each)
-                    v.each do |kk, vv|
-                      if (@dig_dig_fields.include? kk) && (vv.respond_to? :each)
-                        vv.each do |kkk, vvv|
-                          if /\A[-+]?\d+\z/ === vvv
-                            event["#{k}_#{kk}_#{kkk}"] = vvv.to_i
-                          else
-                            event["#{k}_#{kk}_#{kkk}"] = vvv.to_s
-                          end
-                        end
-                      else
-                        if /\A[-+]?\d+\z/ === vv
-                          event["#{k}_#{kk}"] = vv.to_i
-                        else
-                          event["#{k}_#{kk}"] = vv.to_s
-                        end
-                      end
-                    end
-                  else
-                    if /\A[-+]?\d+\z/ === v
-                      event[k] = v.to_i
-                    else
-                      event[k] = v.to_s
-                    end
-                  end
-                end
-              end
-            elsif @parse_method == 'simple'
+            if @parse_method == 'simple'
               doc.each do |k, v|
                   event[k] = v
               end
