@@ -24,7 +24,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
   # The name of the sqlite databse file
   config :placeholder_db_name, :validate => :string, :default => "logstash_sqlite.db"
 
-  config :batch_size, :avlidate => :number, :default => 30
+  config :mongo_cursor_limit, :avlidate => :number, :default => 125
 
   config :since_table, :validate => :string, :default => "logstash_since"
 
@@ -130,7 +130,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
   end
 
   public
-  def get_cursor_for_collection(mongodb, mongo_collection_name, last_id, batch_size)
+  def get_cursor_for_collection(mongodb, mongo_collection_name, last_id)
     collection = mongodb.collection(mongo_collection_name)
     last_id_object = last_id
     if @targetType == 'BSON::ObjectId'
@@ -138,7 +138,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
     elsif @targetType == 'Time'
       last_id_object = Time.parse(last_id)
     end
-    return collection.find({@target_key => {:$gt => last_id_object}}).sort(@target_key => 1).limit(batch_size)
+    return collection.find({@target_key => {:$gt => last_id_object}}).sort(@target_key => 1).limit(@mongo_cursor_limit)
   end
 
   public
@@ -194,7 +194,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
           last_id = @collection_data[index][:last_id]
           @logger.info("Polling mongo", :last_id => last_id, :index => index, :collection => collection_name)
           # get batch of events starting at the last_place
-          cursor = get_cursor_for_collection(@mongodb, collection_name, last_id, batch_size)
+          cursor = get_cursor_for_collection(@mongodb, collection_name, last_id)
           cursor.each do |doc|
             logdate = Time.new
             if doc['_id'].is_a? BSON::ObjectId
