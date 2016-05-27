@@ -24,7 +24,9 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
   # The name of the sqlite databse file
   config :placeholder_db_name, :validate => :string, :default => "logstash_sqlite.db"
 
-  config :mongo_cursor_limit, :avlidate => :number, :default => 125
+  config :mongo_cursor_limit, :validate => :number, :default => 125
+
+  config :mongo_cursor_batch_size, :validate => :number, :default => 125
 
   config :since_table, :validate => :string, :default => "logstash_since"
 
@@ -138,7 +140,11 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
     elsif @targetType == 'Time'
       last_id_object = Time.parse(last_id)
     end
-    return collection.find({@target_key => {:$gt => last_id_object}}).sort(@target_key => 1).limit(@mongo_cursor_limit)
+    cursor = collection.find({@target_key => {:$gt => last_id_object}})
+      .sort(@target_key => 1)
+      .batch_size(@mongo_cursor_batch_size)
+      .limit(@mongo_cursor_limit)
+    return cursor
   end
 
   public
