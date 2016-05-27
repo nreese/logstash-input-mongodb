@@ -219,17 +219,17 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
   end
 
   def run(queue)
-    @logger.debug("Tailing MongoDB")
-    @logger.debug("Collection data is: #{@collection_data}")
+    @logger.info("Tailing MongoDB")
+    @logger.info("Collection data is: #{@collection_data}")
 
     while true && !stop?
       begin
+        @logger.debug("collection_data is: #{@collection_data}")
         @collection_data.each do |index, collection|
           collection_name = collection[:name]
-          @logger.debug("collection_data is: #{@collection_data}")
           last_id = @collection_data[index][:last_id]
-          #@logger.debug("last_id is #{last_id}", :index => index, :collection => collection_name)
-          # get batch of events starting at the last_place if it is set
+          @logger.info("Polling mongo", :last_id => last_id, :index => index, :collection => collection_name)
+          # get batch of events starting at the last_place
           cursor = get_cursor_for_collection(@mongodb, collection_name, last_id, batch_size)
           cursor.each do |doc|
             logdate = Time.new
@@ -380,7 +380,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
 
   def close
     # If needed, use this to tidy up on shutdown
-    @logger.debug("Shutting down...")
+    @logger.info("Shutting down...")
   end
 
 end # class LogStash::Inputs::Example
