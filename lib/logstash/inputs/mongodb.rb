@@ -28,6 +28,8 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
 
   config :mongo_cursor_batch_size, :validate => :number, :default => 125
 
+  config :mongo_cursor_projection, :validate => :hash, :default => nil
+
   config :since_table, :validate => :string, :default => "logstash_since"
 
   # The collection to use. Is turned into a regex so 'events' will match 'events_20150227'
@@ -144,6 +146,9 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
       .sort(@target_key => 1)
       .batch_size(@mongo_cursor_batch_size)
       .limit(@mongo_cursor_limit)
+    if @mongo_cursor_projection
+      cursor = cursor.projection(@mongo_cursor_projection)
+    end
     return cursor
   end
 
