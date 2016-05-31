@@ -199,9 +199,16 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
           collection_name = collection[:name]
           last_id = @collection_data[index][:last_id]
           @logger.info("Polling mongo", :last_id => last_id, :index => index, :collection => collection_name)
-          # get batch of events starting at the last_place
           cursor = get_cursor_for_collection(@mongodb, collection_name, last_id)
-          cursor.each do |doc|
+
+          @beforeCursorNext = Time.now
+          cursor.each_with_index do |doc, cursor_index|
+            afterCursorNext = Time.now
+            cursorNextTime = afterCursorNext - @beforeCursorNext
+            if cursorNextTime >= 0.1
+              @logger.info("slow cursor.next", :time => cursorNextTime, :cursor_index => cursor_index)
+            end
+
             logdate = Time.new
             if doc['_id'].is_a? BSON::ObjectId
               logdate = DateTime.parse(doc['_id'].generation_time.to_s)
@@ -239,6 +246,7 @@ class LogStash::Inputs::MongoDB < LogStash::Inputs::Base
 
             queue << event
             @collection_data[index][:last_id] = pluck_target(doc)
+            @beforeCursorNext = Time.now
           end
           # Store the last-seen doc in the database
           update_placeholder(@sqlitedb, since_table, collection_name, @collection_data[index][:last_id])
