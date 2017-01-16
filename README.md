@@ -49,3 +49,8 @@ input {
 
 ### Install plugin
 * `$LOGSTASH_HOME/bin/plugin install logstash-input-mongodb-0.4.0.gem`
+
+## Debugging
+
+### view contents of sqlite file
+`sqlite3 -header -csv <filename> "select * from since_table"`
